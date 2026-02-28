@@ -77,6 +77,7 @@ def training_epoch(model: EncoderDecoderRNN, optimizer: torch.optim.Optimizer, c
         optimizer.step()
 
         train_loss += loss.item() * indices.shape[0]   
+        break
 
     train_loss /= len(loader.dataset)
     return train_loss
@@ -113,7 +114,6 @@ def validation_epoch(model: EncoderDecoderRNN, criterion: nn.Module,
         model_translation += model.inference(indices.to(device), lengths)
 
     val_loss /= len(loader.dataset)
-    print(model_translation[:10], loader.dataset.texts[1][:10])
 
     bleu_score = sacrebleu.corpus_bleu(model_translation, [loader.dataset.texts[1]], tokenize='none').score
 
@@ -155,3 +155,6 @@ def train(model: EncoderDecoderRNN, optimizer: torch.optim.Optimizer, scheduler:
 
         for (indices, lengths), (_, _) in val_loader:
             print(model.inference(indices[:num_examples, :], lengths[:num_examples]))
+            print(val_loader.dataset.ids2text(indices))
+            print(val_loader.dataset.text2ids(model.inference(indices[:num_examples, :], lengths[:num_examples]), 'en'))
+            break
