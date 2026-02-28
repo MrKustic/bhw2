@@ -77,7 +77,6 @@ def training_epoch(model: EncoderDecoderRNN, optimizer: torch.optim.Optimizer, c
         optimizer.step()
 
         train_loss += loss.item() * indices.shape[0]   
-        break
 
     train_loss /= len(loader.dataset)
     return train_loss
