@@ -11,7 +11,7 @@ import itertools
 class TextDataset(Dataset):
     TRAIN_VAL_RANDOM_SEED = 42
 
-    def __init__(self, de_file: str, en_file: str = None,
+    def __init__(self, de_file: str, en_file: str = None, model_prefix: str="unigram",
                  vocab_size: int = 2000, max_length: int = 128, train_ratio=1.0):
         """
         Dataset with texts, supporting BPE tokenizer    
@@ -37,21 +37,40 @@ class TextDataset(Dataset):
         self.id2word = []
         self.word2id = []
         self.indices = []
-        self.vocab_size = 0
+        self.vocab_size = vocab_size
+
+        find = False
+        if os.path.isfile(model_prefix + '_de.model'):
+            find = True
+            for name in [model_prefix + '_de.model', model_prefix + '_en.model']:
+                id2word = {0: "", 1: "", 2: "", 3: "<unk>"}
+                word2id = {}
+                for i, line in enumerate(open(name, "r")):
+                    word = line.strip()
+                    id2word[i + 4] = word
+                    word2id[word] = i + 4
+                self.id2word.append(id2word)
+                self.word2id.append(word2id)
 
         for id_model, texts in enumerate(self.texts):
             lang = 'en' if id_model == 1 else 'de'
             words = list(itertools.chain.from_iterable([list(text.split()) for text in texts]))
             words = [x for x, y in Counter(words).most_common(vocab_size - 4)]
-            self.word2id.append({word: i + 4 for i, word in enumerate(words)})
-            self.id2word.append({id: word for word, id in self.word2id[-1].items()} | {0: "", 1: "", 2: "", 3: "<unk>"})
+            if not find:
+                self.word2id.append({word: i + 4 for i, word in enumerate(words)})
+                self.id2word.append({id: word for word, id in self.word2id[-1].items()} | {0: "", 1: "", 2: "", 3: "<unk>"})
             self.indices.append(self.text2ids(texts, lang))
-            self.vocab_size = max(self.vocab_size, len(words) + 4)
+
+        if not find:
+            for id_model, name in enumerate([model_prefix + '_de.model', model_prefix + '_en.model']):
+                with open(name, "w") as f:
+                    for i in range(4, self.vocab_size):
+                        print(self.id2word[id_model].get(i, "<unk>"), file=f)
 
         self.max_length = max_length
 
     def id2word_(self, id, id_model):
-        return self.id2word[id_model].get(id, "??")
+        return self.id2word[id_model].get(id, "<unk>")
 
     def word2id_(self, word, id_model):
         return self.word2id[id_model].get(word, self.unk_id)
