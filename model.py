@@ -9,7 +9,7 @@ from tqdm.notebook import tqdm
 
 class EncoderDecoderRNN(nn.Module):
     def __init__(self, dataset: TextDataset, embed_size: int = 256, hidden_size: int = 256,
-                 rnn_type: Type = nn.RNN, rnn_layers: int = 1):
+                 rnn_type: Type = nn.RNN, dropout: float = 0.3, rnn_layers: int = 1):
         """
         Model for text generation
         :param dataset: text data dataset (to extract vocab_size and max_length)
@@ -28,8 +28,8 @@ class EncoderDecoderRNN(nn.Module):
         """
         self.emb_enc = nn.Embedding(self.vocab_size, embed_size, padding_idx=dataset.pad_id)
         self.emb_dec = nn.Embedding(self.vocab_size, embed_size, padding_idx=dataset.pad_id)
-        self.encoder = rnn_type(input_size=embed_size, hidden_size=hidden_size, num_layers=rnn_layers, batch_first=True)
-        self.decoder = rnn_type(input_size=embed_size, hidden_size=hidden_size, num_layers=rnn_layers, batch_first=True)
+        self.encoder = rnn_type(input_size=embed_size, hidden_size=hidden_size, num_layers=rnn_layers, dropout=dropout, batch_first=True)
+        self.decoder = rnn_type(input_size=embed_size, hidden_size=hidden_size, num_layers=rnn_layers, dropout=dropout, batch_first=True)
         self.linear = nn.Linear(hidden_size, self.vocab_size)
 
     # def forward(self, indices_de: torch.Tensor, lengths_de: torch.Tensor, indices_en: torch.Tensor, lengths_en: torch.Tensor) -> torch.Tensor:
@@ -77,6 +77,7 @@ class EncoderDecoderRNN(nn.Module):
         _, unsort_idx = sort_idx.sort()
 
         # 2. Encoder
+        print(indices_de_sorted.max())
         embeds_enc = self.emb_enc(indices_de_sorted)
         # pack_padded_sequence требует длины на CPU (int64)
         packed_embeds_enc = pack_padded_sequence(embeds_enc, lengths_de_sorted.cpu(), batch_first=True)
