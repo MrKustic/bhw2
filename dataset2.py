@@ -46,7 +46,7 @@ class TextDataset(Dataset):
             self.word2id.append({word: i + 4 for i, word in enumerate(words)})
             self.id2word.append({id: word for word, id in self.word2id[-1].items()} | {0: "", 1: "", 2: "", 3: ""})
             self.indices.append(self.text2ids(texts, lang))
-            self.vocab_size = max(self.vocab_size, len(words))
+            self.vocab_size = max(self.vocab_size, len(words) + 4)
 
         self.max_length = max_length
 
