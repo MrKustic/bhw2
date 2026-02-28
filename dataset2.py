@@ -44,7 +44,7 @@ class TextDataset(Dataset):
             words = list(itertools.chain.from_iterable([list(text.split()) for text in texts]))
             words = [x for x, y in Counter(words).most_common(vocab_size - 4)]
             self.word2id.append({word: i + 4 for i, word in enumerate(words)})
-            self.id2word.append({id: word for word, id in self.word2id[-1].items()} | {0: "", 1: "", 2: "", 3: ""})
+            self.id2word.append({id: word for word, id in self.word2id[-1].items()} | {0: "", 1: "", 2: "", 3: "<unk>"})
             self.indices.append(self.text2ids(texts, lang))
             self.vocab_size = max(self.vocab_size, len(words) + 4)
 
