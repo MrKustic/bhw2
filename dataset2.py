@@ -12,7 +12,7 @@ class TextDataset(Dataset):
     TRAIN_VAL_RANDOM_SEED = 42
 
     def __init__(self, de_file: str, en_file: str = None, model_prefix: str="unigram",
-                 vocab_size: int = 2000, max_length: int = 128, train_ratio=1.0):
+                 vocab_size: int = 2000, max_length: int = 80, train_ratio=1.0):
         """
         Dataset with texts, supporting BPE tokenizer    
         :param data_file: txt file containing texts
@@ -54,9 +54,9 @@ class TextDataset(Dataset):
 
         for id_model, texts in enumerate(self.texts):
             lang = 'en' if id_model == 1 else 'de'
-            words = list(itertools.chain.from_iterable([list(text.split()) for text in texts]))
-            words = [x for x, y in Counter(words).most_common(vocab_size - 4)]
             if not find:
+                words = list(itertools.chain.from_iterable([list(text.split()) for text in texts]))
+                words = [x for x, y in Counter(words).most_common(vocab_size - 4)]
                 self.word2id.append({word: i + 4 for i, word in enumerate(words)})
                 self.id2word.append({id: word for word, id in self.word2id[-1].items()} | {0: "", 1: "", 2: "", 3: "<unk>"})
             self.indices.append(self.text2ids(texts, lang))
