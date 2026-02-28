@@ -153,5 +153,5 @@ def train(model: EncoderDecoderRNN, optimizer: torch.optim.Optimizer, scheduler:
         bleu_scores += [bleu_score]
         plot_losses(train_losses, val_losses, bleu_scores)
 
-        for indices, lengths, _, _ in val_loader:
+        for (indices, lengths), (_, _) in val_loader:
             print(model.inference(indices[:num_examples, :], lengths[:num_examples]))
