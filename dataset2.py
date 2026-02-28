@@ -79,8 +79,8 @@ class TextDataset(Dataset):
 
         model_id = 0 if lang == 'de' else 1
         if type(ids[0]) == int:
-            return " ".join([self.id2word_(id, model_id) for id in ids])
-        return [" ".join([self.id2word_(id, model_id) for id in id_list]) for id_list in ids]
+            return " ".join([self.id2word_(id, model_id) for id in ids]).strip()
+        return [" ".join([self.id2word_(id, model_id) for id in id_list]).strip() for id_list in ids]
 
     def __len__(self):
         """
