@@ -29,7 +29,7 @@ class EncoderDecoderRNN(nn.Module):
         self.emb_enc = nn.Embedding(self.vocab_size, embed_size, padding_idx=dataset.pad_id)
         self.emb_dec = nn.Embedding(self.vocab_size, embed_size, padding_idx=dataset.pad_id)
         self.encoder = rnn_type(input_size=embed_size, hidden_size=hidden_size, num_layers=rnn_layers, batch_first=True)
-        self.decoder = rnn_type(input_size=hidden_size, hidden_size=hidden_size, num_layers=rnn_layers, batch_first=True)
+        self.decoder = rnn_type(input_size=embed_size, hidden_size=hidden_size, num_layers=rnn_layers, batch_first=True)
         self.linear = nn.Linear(hidden_size, self.vocab_size)
 
     # def forward(self, indices_de: torch.Tensor, lengths_de: torch.Tensor, indices_en: torch.Tensor, lengths_en: torch.Tensor) -> torch.Tensor:
@@ -237,14 +237,10 @@ class EncoderDecoderRNN(nn.Module):
             embeds = self.emb_dec(new_tokens)[:, None, :]
             output, hidden = self.decoder(embeds, hidden)
             logits = self.linear(output)
-            # print(logits)
-            new_tokens = Categorical(logits=logits[:, 0, :] / temp).sample()
-            # print(nn.Softmax(dim=1)(logits[:, 0, :] / temp).max(dim=1))
+            new_tokens = logits[:, 0, :].argmax(dim=-1)
             new_tokens = torch.where(mask_eos, self.dataset.pad_id, new_tokens)
             mask_eos = mask_eos | (new_tokens == self.dataset.eos_id)
             tokens = torch.cat([tokens, new_tokens[:, None]], dim=1)
-
-        logits = self.linear(output) # (B, L, V)
 
         generated = self.dataset.ids2text(tokens, lang='en')
 
