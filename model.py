@@ -237,7 +237,7 @@ class EncoderDecoderRNN(nn.Module):
             embeds = self.emb_dec(new_tokens)[:, None, :]
             output, hidden = self.decoder(embeds, hidden)
             logits = self.linear(output)
-            new_tokens = logits[:, 0, :].argmax(dim=-1)
+            new_tokens = Categorical(logits=logits[:, 0, :] / temp).sample()
             new_tokens = torch.where(mask_eos, self.dataset.pad_id, new_tokens)
             mask_eos = mask_eos | (new_tokens == self.dataset.eos_id)
             tokens = torch.cat([tokens, new_tokens[:, None]], dim=1)
