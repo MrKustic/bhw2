@@ -77,7 +77,6 @@ class EncoderDecoderRNN(nn.Module):
         _, unsort_idx = sort_idx.sort()
 
         # 2. Encoder
-        print(indices_de_sorted.max())
         embeds_enc = self.emb_enc(indices_de_sorted)
         # pack_padded_sequence требует длины на CPU (int64)
         packed_embeds_enc = pack_padded_sequence(embeds_enc, lengths_de_sorted.cpu(), batch_first=True)
