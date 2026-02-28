@@ -227,10 +227,8 @@ class EncoderDecoderRNN(nn.Module):
         indices = indices.to(device)
         batch_size = len(indices)
         embeds_enc = self.emb_enc(indices) # (B, L, H)
-        print(embeds_enc.shape)
         packed_embeds_enc = pack_padded_sequence(embeds_enc, lengths, batch_first=True, enforce_sorted=False)
         _, hidden = self.encoder(packed_embeds_enc) 
-        print(hidden[0].shape, hidden[1].shape)
         tokens = torch.tensor([self.dataset.bos_id] * batch_size, device=device).unsqueeze(1)
 
         new_tokens = torch.tensor([self.dataset.bos_id] * batch_size, device=device)
