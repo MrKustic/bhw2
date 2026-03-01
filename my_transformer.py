@@ -12,7 +12,7 @@ class PositionalEncoding(nn.Module):
 
         values = torch.exp(torch.arange(0, embed_size, 2) * (-torch.log(torch.tensor(10000)) / embed_size))
         positions = torch.arange(0, max_length)
-        values = positions[:, None] / values[None, :]
+        values = positions[:, None] * values[None, :]
 
         self.pe = torch.zeros((max_length, embed_size))
         self.pe[:, 0::2] = torch.sin(values)
@@ -51,7 +51,7 @@ class Attention(nn.Module):
         V = self.WV(value)
         # Q, K, V - (batch_size, length, hidden_size)
 
-        dk = torch.sqrt(torch.tensor(Q.shape[1]))
+        dk = torch.sqrt(torch.tensor(Q.shape[-1]))
 
         pairwise_dot = torch.bmm(Q, K.transpose(1, 2)) / dk # (batch_size, length, length)
 
@@ -80,7 +80,7 @@ class MultiHeadAttention(nn.Module):
         return: multihead_attention (batch_size, length, embed_size)
         '''
 
-        heads = torch.cat([attention(query, key, value) for attention in self.heads_list], dim=-1) # (batch_size, length, embed_size)
+        heads = torch.cat([attention(query, key, value, mask) for attention in self.heads_list], dim=-1) # (batch_size, length, embed_size)
 
         multihead_attention = self.WO(heads) # (batch_size, length, embed_size)
 
@@ -177,7 +177,7 @@ class DecoderTransformerLayer(nn.Module):
         '''
         batch_size, length, _ = encoder_output.shape
 
-        mask = self.create_mask_(batch_size, length) if self.training else None
+        mask = self.create_mask_(batch_size, length)
         masked_attention_output = self.masked_attention(embeds, embeds, embeds, mask)
         norm_masked_output = self.layer_norm1(masked_attention_output + embeds)
 
@@ -286,5 +286,3 @@ class EncoderDecoderTransformer(nn.Module):
         generated = self.dataset.ids2text(tokens, lang='en')
 
         return generated
-
-
