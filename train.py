@@ -149,5 +149,5 @@ def train(model: EncoderDecoderRNN, optimizer: torch.optim.Optimizer, scheduler:
         for (indices, lengths), (_, _) in val_loader:
             print(model.inference(indices[:num_examples, :].to(device), lengths[:num_examples]))
             print(val_loader.dataset.ids2text(indices[:num_examples, :]))
-            print(val_loader.dataset.text2ids(model.inference(indices[:num_examples, :], lengths[:num_examples]), 'en'))
+            print(val_loader.dataset.text2ids(model.inference(indices[:num_examples, :].to(device), lengths[:num_examples]), 'en'))
             break
