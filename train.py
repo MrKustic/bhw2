@@ -62,7 +62,7 @@ def training_epoch(model: EncoderDecoderRNN, optimizer: torch.optim.Optimizer, c
         """
         optimizer.zero_grad()
         indices = indices.to(device)
-        target = indices.to(device)
+        target = target.to(device)
 
         logits = model(indices, lengths, target[:, :-1], target_lengths - 1)
         loss = criterion(logits.transpose(1, 2), target[:, 1:])
@@ -98,7 +98,7 @@ def validation_epoch(model: EncoderDecoderRNN, criterion: nn.Module,
         Accumulate sum of losses for different batches in val_loss
         """
         indices = indices.to(device)
-        target = indices.to(device)
+        target = target.to(device)
 
         logits = model(indices, lengths, target[:, :-1], target_lengths - 1) # (batch_size, length, vocab_size)
         loss = criterion(logits.transpose(1, 2), target[:, 1:])
