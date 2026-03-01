@@ -124,6 +124,7 @@ def train(model: EncoderDecoderRNN, optimizer: torch.optim.Optimizer, scheduler:
     :param num_epochs: number of training epochs
     :param num_examples: number of generation examples to print after each epoch
     """
+    device = next(model.parameters()).device
     train_losses, val_losses, bleu_scores = [], [], []
     criterion = nn.CrossEntropyLoss(ignore_index=train_loader.dataset.pad_id, label_smoothing=0.1)
 
