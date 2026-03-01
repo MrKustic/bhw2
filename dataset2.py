@@ -1,6 +1,6 @@
 import os
 import torch
-from typing import Union, List, Tuple
+from typing import Union, List, Tuple, Dict
 from sentencepiece import SentencePieceTrainer, SentencePieceProcessor
 from torch.utils.data import Dataset
 from sklearn.model_selection import train_test_split
@@ -12,7 +12,7 @@ class TextDataset(Dataset):
     TRAIN_VAL_RANDOM_SEED = 42
 
     def __init__(self, de_file: str, en_file: str = None, model_prefix: str="unigram",
-                 vocab_size: int = 2000, max_length: int = 80, train_ratio=1.0):
+                 vocab_size: int = 2000, max_length: int = None, id2word: List[Dict] = None, word2id: List[Dict] = None, train_ratio=1.0):
         """
         Dataset with texts, supporting BPE tokenizer    
         :param data_file: txt file containing texts
@@ -33,41 +33,34 @@ class TextDataset(Dataset):
             self.texts.append(open(en_file, "r").readlines())
 
         self.texts = [texts[:int(n_texts * train_ratio)] for texts in self.texts]
+        self.indices = []
+
+        if max_length is not None:
+            assert word2id is not None and id2word is not None
+            self.id2word = id2word
+            self.word2id = word2id
+            self.max_length = max_length
+            self.vocab_sizes = [len(dct) for dct in id2word]
+            for id_model, texts in enumerate(self.texts):
+                lang = 'en' if id_model == 1 else 'de'
+                self.indices.append(self.text2ids(texts, lang))
+            
+            return
 
         self.id2word = []
         self.word2id = []
-        self.indices = []
-        self.vocab_size = vocab_size
-
-        find = False
-        if os.path.isfile(model_prefix + '_de.model'):
-            find = True
-            for name in [model_prefix + '_de.model', model_prefix + '_en.model']:
-                id2word = {0: "", 1: "", 2: "", 3: "<unk>"}
-                word2id = {}
-                for i, line in enumerate(open(name, "r")):
-                    word = line.strip()
-                    id2word[i + 4] = word
-                    word2id[word] = i + 4
-                self.id2word.append(id2word)
-                self.word2id.append(word2id)
+        self.vocab_sizes = []
 
         for id_model, texts in enumerate(self.texts):
             lang = 'en' if id_model == 1 else 'de'
-            if not find:
-                words = list(itertools.chain.from_iterable([list(text.split()) for text in texts]))
-                words = [x for x, y in Counter(words).most_common(vocab_size - 4)]
-                self.word2id.append({word: i + 4 for i, word in enumerate(words)})
-                self.id2word.append({id: word for word, id in self.word2id[-1].items()} | {0: "", 1: "", 2: "", 3: "<unk>"})
+            words = list(itertools.chain.from_iterable([list(text.split()) for text in texts]))
+            words = [x for x, y in Counter(words).most_common(vocab_size - 4)]
+            self.id2word.append({id + 4: word for id, word in enumerate(words)} | {0: "<pad>", 1: "<bos>", 2: "<eos>", 3: "<unk>"})
+            self.word2id.append({word: id for id, word in self.id2word[-1].items()})
             self.indices.append(self.text2ids(texts, lang))
+            self.vocab_sizes.append(len(words) + 4)
 
-        if not find:
-            for id_model, name in enumerate([model_prefix + '_de.model', model_prefix + '_en.model']):
-                with open(name, "w") as f:
-                    for i in range(4, self.vocab_size):
-                        print(self.id2word[id_model].get(i, "<unk>"), file=f)
-
-        self.max_length = max_length
+        self.max_length = max([len(max(indices_curr, key=len)) for indices_curr in self.indices])
 
     def id2word_(self, id, id_model):
         return self.id2word[id_model].get(id, "<unk>")
@@ -98,8 +91,8 @@ class TextDataset(Dataset):
 
         model_id = 0 if lang == 'de' else 1
         if type(ids[0]) == int:
-            return " ".join([self.id2word_(id, model_id) for id in ids]).strip()
-        return [" ".join([self.id2word_(id, model_id) for id in id_list]).strip() for id_list in ids]
+            return " ".join([self.id2word_(id, model_id) for id in ids if id >= 3]).strip()
+        return [" ".join([self.id2word_(id, model_id) for id in id_list if id >= 3]).strip() for id_list in ids]
 
     def __len__(self):
         """
