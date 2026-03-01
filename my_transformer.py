@@ -175,7 +175,7 @@ class DecoderTransformerLayer(nn.Module):
         param encoder_output: output of encoder (batch_size, length, embeds_size)
         return: (batch_size, length, embeds_size)
         '''
-        batch_size, length, _ = encoder_output.shape
+        batch_size, length, _ = embeds.shape
 
         mask = self.create_mask_(batch_size, length)
         masked_attention_output = self.masked_attention(embeds, embeds, embeds, mask)
