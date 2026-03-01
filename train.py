@@ -28,12 +28,6 @@ def plot_losses(train_losses: List[float], val_losses: List[float], bleu_scores:
     """
     Calculate train and validation perplexities given lists of losses
     """
-    # train_perplexities = np.exp(np.array(train_losses))
-    # val_perplexities = np.exp(np.array(val_losses))
-
-    # axs[1].plot(range(1, len(train_perplexities) + 1), train_perplexities, label='train')
-    # axs[1].plot(range(1, len(val_perplexities) + 1), val_perplexities, label='val')
-    # axs[1].set_ylabel('perplexity')
 
     axs[1].plot(range(1, len(bleu_scores) + 1), bleu_scores, label='val')
     axs[1].set_ylabel('bleu4 score')
@@ -67,16 +61,15 @@ def training_epoch(model: EncoderDecoderRNN, optimizer: torch.optim.Optimizer, c
         Accumulate sum of losses for different batches in train_loss
         """
         optimizer.zero_grad()
+        indices = indices.to(device)
+        target = indices.to(device)
 
-        logits = model(indices.to(device), lengths, target[:, :-1].to(device), target_lengths - 1)
-        new_length = max(logits.shape[1], target.shape[1] - 1)
-        logits = torch.nn.functional.pad(logits, (0, 0, 0, new_length - logits.shape[1])) # (B, L, V)
-        pad_target = torch.nn.functional.pad(target[:, 1:], (0, new_length - target.shape[1] + 1, 0, 0))
-        loss = criterion(logits.transpose(1, 2), pad_target.to(device))
+        logits = model(indices, lengths, target[:, :-1], target_lengths - 1)
+        loss = criterion(logits.transpose(1, 2), target[:, 1:])
         loss.backward()
         optimizer.step()
 
-        train_loss += loss.item() * indices.shape[0]   
+        train_loss += loss.item() * indices.shape[0]  
 
     train_loss /= len(loader.dataset)
     return train_loss
@@ -104,13 +97,13 @@ def validation_epoch(model: EncoderDecoderRNN, criterion: nn.Module,
         Process one validation step: calculate loss.
         Accumulate sum of losses for different batches in val_loss
         """
-        logits = model(indices.to(device), lengths, target.to(device)[:, :-1], target_lengths - 1)
-        new_length = max(logits.shape[1], target.shape[1] - 1)
-        logits = torch.nn.functional.pad(logits, (0, 0, 0, new_length - logits.shape[1])) # (B, L, V)
-        pad_target = torch.nn.functional.pad(target[:, 1:], (0, new_length - target.shape[1] + 1, 0, 0))
-        loss = criterion(logits.transpose(1, 2), pad_target.to(device))
+        indices = indices.to(device)
+        target = indices.to(device)
+
+        logits = model(indices, lengths, target[:, :-1], target_lengths - 1) # (batch_size, length, vocab_size)
+        loss = criterion(logits.transpose(1, 2), target[:, 1:])
         val_loss += loss.item() * indices.shape[0]
-        model_translation += model.inference(indices.to(device), lengths)
+        model_translation += model.inference(indices, lengths)
 
     val_loss /= len(loader.dataset)
 
@@ -132,7 +125,7 @@ def train(model: EncoderDecoderRNN, optimizer: torch.optim.Optimizer, scheduler:
     :param num_examples: number of generation examples to print after each epoch
     """
     train_losses, val_losses, bleu_scores = [], [], []
-    criterion = nn.CrossEntropyLoss(ignore_index=train_loader.dataset.pad_id)
+    criterion = nn.CrossEntropyLoss(ignore_index=train_loader.dataset.pad_id, label_smoothing=0.1)
 
     for epoch in range(1, num_epochs + 1):
         train_loss = training_epoch(
