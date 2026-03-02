@@ -7,7 +7,7 @@ from torch import nn
 from torch.utils.data import DataLoader
 from IPython.display import clear_output
 from tqdm.notebook import tqdm
-from model import EncoderDecoderRNN
+from my_transformer import EncoderDecoderTransformer
 import sacrebleu
 
 sns.set_style('whitegrid')
@@ -39,7 +39,7 @@ def plot_losses(train_losses: List[float], val_losses: List[float], bleu_scores:
     plt.show()
 
 
-def training_epoch(model: EncoderDecoderRNN, optimizer: torch.optim.Optimizer, criterion: nn.Module,
+def training_epoch(model: EncoderDecoderTransformer, optimizer: torch.optim.Optimizer, criterion: nn.Module,
                    loader: DataLoader, tqdm_desc: str):
     """
     Process one training epoch
@@ -54,7 +54,7 @@ def training_epoch(model: EncoderDecoderRNN, optimizer: torch.optim.Optimizer, c
     train_loss = 0.0
 
     model.train()
-    for (indices, lengths), (target, target_lengths) in tqdm(loader, desc=tqdm_desc):
+    for indices, lengths, target, target_lengths in tqdm(loader, desc=tqdm_desc):
         """
         Process one training step: calculate loss,
         call backward and make one optimizer step.
@@ -64,7 +64,7 @@ def training_epoch(model: EncoderDecoderRNN, optimizer: torch.optim.Optimizer, c
         indices = indices.to(device)
         target = target.to(device)
 
-        logits = model(indices, lengths, target[:, :-1], target_lengths - 1)
+        logits = model(indices, target[:, :-1], lengths)
         loss = criterion(logits.transpose(1, 2), target[:, 1:])
         loss.backward()
         optimizer.step()
@@ -76,7 +76,7 @@ def training_epoch(model: EncoderDecoderRNN, optimizer: torch.optim.Optimizer, c
 
 
 @torch.no_grad()
-def validation_epoch(model: EncoderDecoderRNN, criterion: nn.Module,
+def validation_epoch(model: EncoderDecoderTransformer, criterion: nn.Module,
                      loader: DataLoader, tqdm_desc: str):
     """
     Process one validation epoch
@@ -92,7 +92,7 @@ def validation_epoch(model: EncoderDecoderRNN, criterion: nn.Module,
     model_translation = []
 
     model.eval()
-    for (indices, lengths), (target, target_lengths) in tqdm(loader, desc=tqdm_desc):
+    for indices, lengths, target, target_lengths in tqdm(loader, desc=tqdm_desc):
         """
         Process one validation step: calculate loss.
         Accumulate sum of losses for different batches in val_loss
@@ -100,7 +100,7 @@ def validation_epoch(model: EncoderDecoderRNN, criterion: nn.Module,
         indices = indices.to(device)
         target = target.to(device)
 
-        logits = model(indices, lengths, target[:, :-1], target_lengths - 1) # (batch_size, length, vocab_size)
+        logits = model(indices, target[:, :-1], lengths) # (batch_size, length, vocab_size)
         loss = criterion(logits.transpose(1, 2), target[:, 1:])
         val_loss += loss.item() * indices.shape[0]
         model_translation += model.inference(indices, lengths)
@@ -112,7 +112,7 @@ def validation_epoch(model: EncoderDecoderRNN, criterion: nn.Module,
     return val_loss, bleu_score
 
 
-def train(model: EncoderDecoderRNN, optimizer: torch.optim.Optimizer, scheduler: Optional[Any],
+def train(model: EncoderDecoderTransformer, optimizer: torch.optim.Optimizer, scheduler: Optional[Any],
           train_loader: DataLoader, val_loader: DataLoader, num_epochs: int, num_examples=5):
     """
     Train language model for several epochs
@@ -146,9 +146,8 @@ def train(model: EncoderDecoderRNN, optimizer: torch.optim.Optimizer, scheduler:
         bleu_scores += [bleu_score]
         plot_losses(train_losses, val_losses, bleu_scores)
 
-        for (indices, lengths), (_, _) in val_loader:
+        for indices, lengths, _, _ in val_loader:
             translation = model.inference(indices[:num_examples, :].to(device), lengths[:num_examples])
-            print(translation)
-            print(val_loader.dataset.ids2text(indices[:num_examples, :]))
+            print(*zip(translation, val_loader.dataset.ids2text(indices[:num_examples, :])), sep='\n')
             print(val_loader.dataset.text2ids(translation, 'en'))
             break
