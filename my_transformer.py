@@ -81,8 +81,7 @@ class MultiHeadAttention(nn.Module):
         param mask_dim: int
         return: attention_mask, where mask[i][0][j] == 1 iff j >= lengths[i] (batch_size, 1, mask_dim)
         '''
-        device = lengths.device
-        return (torch.arange(mask_dim, device=device) >= lengths[:, None]).unsqueeze(1)
+        return (torch.arange(mask_dim) >= lengths[:, None]).unsqueeze(1)
 
     def forward(self, query, key, value, mask=None):
         '''
@@ -151,7 +150,7 @@ class EncoderTransformer(nn.Module):
 
         pe_embeds = self.pe(embeds)
 
-        attention_mask = MultiHeadAttention.create_attention_mask_(lengths, embeds.shape[1]) if lengths is not None else None
+        attention_mask = MultiHeadAttention.create_attention_mask_(lengths, embeds.shape[1]).to(device) if lengths is not None else None
 
         output = pe_embeds
         for transformer in self.transformer_layers:
@@ -230,7 +229,7 @@ class DecoderTransformer(nn.Module):
 
         pe_embeds = self.pe(embeds)
 
-        attention_mask = MultiHeadAttention.create_attention_mask_(lengths, encoder_output.shape[1]) if lengths is not None else None
+        attention_mask = MultiHeadAttention.create_attention_mask_(lengths, encoder_output.shape[1]).to(device) if lengths is not None else None
 
         output = pe_embeds
         for transformer in self.transformer_layers:
