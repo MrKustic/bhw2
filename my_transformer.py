@@ -74,6 +74,16 @@ class MultiHeadAttention(nn.Module):
 
         self.dropout = nn.Dropout(dropout)
 
+    @staticmethod
+    def create_attention_mask_(lengths: torch.Tensor, mask_dim: int):
+        '''
+        param lengths: (batch_size,)
+        param mask_dim: int
+        return: attention_mask, where mask[i][0][j] == 1 iff j >= lengths[i] (batch_size, 1, mask_dim)
+        '''
+        device = lengths.device
+        return (torch.arange(mask_dim, device=device) >= lengths[:, None]).unsqueeze(1)
+
     def forward(self, query, key, value, mask=None):
         '''
         params query, key, value: matrices (batch_size, length, embeds_size)
@@ -104,13 +114,13 @@ class EncoderTransformerLayer(nn.Module):
             nn.Dropout(dropout)
         )
 
-    def forward(self, embeds):
+    def forward(self, embeds, attention_mask=None):
         '''
         param embeds: matrix of embeddings (batch_size, length, embeds_size)
+        param attention_mask: (batch_size, length, length)
         return: (batch_size, length, embeds_size)
         '''
-
-        attention = self.attention(embeds, embeds, embeds)
+        attention = self.attention(embeds, embeds, embeds, attention_mask)
 
         norm_attention = self.layer_norm1(attention + embeds)
 
@@ -126,18 +136,26 @@ class EncoderTransformer(nn.Module):
 
         self.pe = PositionalEncoding(max_length, embed_size, dropout)
 
-        self.transformer_layers = nn.Sequential(*[
+        self.transformer_layers = nn.ModuleList([
             EncoderTransformerLayer(embed_size, feedforward_hidden_size, n_heads, dropout)
             for _ in range(n_layers)
             ])
 
-    def forward(self, embeds):
+    def forward(self, embeds, lengths=None):
         '''
         param embeds: matrix of embeddings (batch_size, length, embeds_size)
+        param lengths: lengths of sequences in batch (batch_size,)
         return: (batch_size, length, embeds_size)
         '''
+        device = next(self.parameters()).device
+
         pe_embeds = self.pe(embeds)
-        output = self.transformer_layers(pe_embeds)
+
+        attention_mask = MultiHeadAttention.create_attention_mask_(lengths, embeds.shape[1]) if lengths is not None else None
+
+        output = pe_embeds
+        for transformer in self.transformer_layers:
+            output = transformer(output, attention_mask)
 
         return output
 
@@ -160,7 +178,7 @@ class DecoderTransformerLayer(nn.Module):
             nn.Dropout(dropout)
         )
 
-    def create_mask_(self, batch_size, length):
+    def create_causal_mask_(self, batch_size, length):
         '''
         create batch of upper-triangular matrix
         return: (batch_size, length, length)
@@ -169,19 +187,21 @@ class DecoderTransformerLayer(nn.Module):
         mask = torch.triu(torch.ones((length, length), dtype=torch.bool, device=device), diagonal=1)
         return mask.repeat(batch_size, 1, 1)
 
-    def forward(self, embeds, encoder_output):
+    def forward(self, embeds, encoder_output, attention_mask=None):
         '''
         param embeds: matrix of embeddings (batch_size, length, embeds_size)
         param encoder_output: output of encoder (batch_size, length, embeds_size)
         return: (batch_size, length, embeds_size)
         '''
+        device = next(self.parameters()).device
         batch_size, length, _ = embeds.shape
 
-        mask = self.create_mask_(batch_size, length)
+        mask = self.create_causal_mask_(batch_size, length)
+
         masked_attention_output = self.masked_attention(embeds, embeds, embeds, mask)
         norm_masked_output = self.layer_norm1(masked_attention_output + embeds)
 
-        cross_attention_output = self.cross_attention(norm_masked_output, encoder_output, encoder_output)
+        cross_attention_output = self.cross_attention(norm_masked_output, encoder_output, encoder_output, attention_mask)
         norm_cross_output = self.layer_norm2(cross_attention_output + norm_masked_output)
 
         feedforward_output = self.feedforward(norm_cross_output)
@@ -201,7 +221,7 @@ class DecoderTransformer(nn.Module):
             for _ in range(n_layers)
             ])
 
-    def forward(self, embeds, encoder_output):
+    def forward(self, embeds, encoder_output, lengths=None):
         '''
         param embeds: matrix of embeddings (batch_size, length, embeds_size)
         param encoder_output: output of encoder (batch_size, length, embeds_size)
@@ -210,9 +230,11 @@ class DecoderTransformer(nn.Module):
 
         pe_embeds = self.pe(embeds)
 
+        attention_mask = MultiHeadAttention.create_attention_mask_(lengths, encoder_output.shape[1]) if lengths is not None else None
+
         output = pe_embeds
         for transformer in self.transformer_layers:
-            output = transformer(output, encoder_output)
+            output = transformer(output, encoder_output, attention_mask)
 
         return output
 
@@ -233,7 +255,7 @@ class EncoderDecoderTransformer(nn.Module):
 
         self.linear = nn.Linear(embed_size, vocab_sizes[1])
 
-    def forward(self, encoder_indices, encoder_lengths, decoder_indices, decoder_lengths):
+    def forward(self, encoder_indices, decoder_indices, encoder_lengths=None):
         '''
         params encoder_indices, decoder_indices -- batch of padded tokenized sequences (batch_size, length)
         params encoder_lengths, decoder_lengths -- real lengths of sequences (batch_size,)
@@ -242,9 +264,9 @@ class EncoderDecoderTransformer(nn.Module):
         input_embeddings = self.encoder_embedding(encoder_indices)
         output_embeddings = self.decoder_embedding(decoder_indices)
 
-        encoder_output = self.encoder(input_embeddings)
+        encoder_output = self.encoder(input_embeddings, encoder_lengths)
 
-        decoder_output = self.decoder(output_embeddings, encoder_output)
+        decoder_output = self.decoder(output_embeddings, encoder_output, encoder_lengths)
 
         logits = self.linear(decoder_output)
 
@@ -262,7 +284,7 @@ class EncoderDecoderTransformer(nn.Module):
         device = next(self.parameters()).device
 
         input_embeddings = self.encoder_embedding(indices)
-        encoder_output = self.encoder(input_embeddings)
+        encoder_output = self.encoder(input_embeddings, lengths)
 
         batch_size = indices.shape[0]
         tokens = torch.tensor([self.dataset.bos_id] * batch_size, device=device, dtype=torch.int32)[:, None]
@@ -270,7 +292,7 @@ class EncoderDecoderTransformer(nn.Module):
         token_embeddings = self.decoder_embedding(tokens) # (batch_size, 1, embed_size)
 
         for i in range(self.max_length - 1):
-            decoder_output = self.decoder(token_embeddings, encoder_output)
+            decoder_output = self.decoder(token_embeddings, encoder_output, lengths)
 
             logits = self.linear(decoder_output)
             new_tokens = Categorical(logits=logits[:, -1, :] / temp).sample() # (batch_size,)
