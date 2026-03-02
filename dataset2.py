@@ -3,6 +3,7 @@ import torch
 from typing import Union, List, Tuple, Dict
 from sentencepiece import SentencePieceTrainer, SentencePieceProcessor
 from torch.utils.data import Dataset
+from torch.nn.utils.rnn import pad_sequence
 from sklearn.model_selection import train_test_split
 from collections import Counter
 import itertools
@@ -116,7 +117,19 @@ class TextDataset(Dataset):
         result = []
         for indices_list in self.indices:
             length = min(len(indices_list[item]), self.max_length - 2)
-            indices = torch.tensor([self.bos_id] + indices_list[item][:length] + [self.eos_id] + [self.pad_id] * (self.max_length - length - 2))
-            result.append((indices, length + 2))
+            indices = torch.tensor([self.bos_id] + indices_list[item][:length] + [self.eos_id])
+            result += [indices, length + 2]
 
-        return result
+        return tuple(result)
+
+
+    def collate_fn(self, data):
+        if len(data[0]) == 2:
+            indices, lengths = zip(*data)
+            pad_indices = pad_sequence(indices, batch_first=True, padding_value=self.pad_id)
+            return pad_indices, torch.tensor(lengths)
+        
+        indices, ind_lengths, target, trg_lengths = zip(*data)
+        pad_indices = pad_sequence(indices, batch_first=True, padding_value=self.pad_id)
+        pad_target = pad_sequence(target, batch_first=True, padding_value=self.pad_id)
+        return pad_indices, torch.tensor(ind_lengths), pad_target, torch.tensor(trg_lengths)
