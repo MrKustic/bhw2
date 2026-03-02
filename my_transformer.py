@@ -226,6 +226,7 @@ class DecoderTransformer(nn.Module):
         param encoder_output: output of encoder (batch_size, length, embeds_size)
         return: (batch_size, length, embeds_size)     
         '''
+        device = next(self.parameters()).device
 
         pe_embeds = self.pe(embeds)
 
