@@ -7,6 +7,7 @@ from torch.nn.utils.rnn import pad_sequence
 from sklearn.model_selection import train_test_split
 from collections import Counter
 import itertools
+import random
 
 
 class TextDataset(Dataset):
@@ -139,35 +140,72 @@ class TextDataset(Dataset):
         return pad_indices, torch.tensor(ind_lengths), pad_target, torch.tensor(trg_lengths)
 
 
+# class LengthBatchSampler(Sampler):
+#     def __init__(self, lengths: torch.Tensor, batch_size: int, block_size: int=10, shuffle: bool=False):
+#         '''
+#         lengths: lengths of sequences (len(dataset),)
+#         batch_size: int
+#         block_size: number of batches in one block (elements in each block sorted by length in descending order)
+#         '''
+#         self.batch_size = batch_size
+#         self.sorted_indices = lengths.argsort(descending=False)
+#         self.block_size = block_size
+#         self.gen = torch.Generator().manual_seed(42)
+#         self.shuffle = shuffle
+
+#     def __len__(self):
+#         return (len(self.sorted_indices) + self.batch_size - 1) // self.batch_size
+
+#     def __iter__(self):
+#         num_elements = len(self.sorted_indices)
+#         step = self.block_size * self.batch_size
+#         cnt_blocks = (num_elements + step - 1) // step
+#         result_batches = []
+#         for start in range(0, num_elements, step):
+#             block_len = min(step, num_elements - start)
+#             indices = self.sorted_indices[start: start + block_len]
+#             perm = torch.randperm(block_len, generator=self.gen) if self.shuffle else torch.arange(block_len)
+#             shuffled_indices = indices[perm]
+#             for i in range((block_len + self.batch_size - 1) // self.batch_size):
+#                 result_batches.append(shuffled_indices[i * self.batch_size: min((i + 1) * self.batch_size, block_len)])
+        
+#         batch_perm = torch.randperm(len(result_batches), generator=self.gen) if self.shuffle else torch.arange(len(result_batches))
+#         for i in batch_perm:
+#             yield result_batches[i]
+
+
 class LengthBatchSampler(Sampler):
-    def __init__(self, lengths: torch.Tensor, batch_size: int, block_size: int=10, shuffle: bool=False):
+    def __init__(self, lengths: torch.Tensor, batch_size: int, block_size: int=50, shuffle: bool=False):
         '''
         lengths: lengths of sequences (len(dataset),)
         batch_size: int
         block_size: number of batches in one block (elements in each block sorted by length in descending order)
         '''
         self.batch_size = batch_size
-        self.sorted_indices = lengths.argsort(descending=False)
+        self.lengths = lengths
         self.block_size = block_size
-        self.gen = torch.Generator().manual_seed(42)
         self.shuffle = shuffle
 
     def __len__(self):
-        return (len(self.sorted_indices) + self.batch_size - 1) // self.batch_size
+        return (len(self.lengths) + self.batch_size - 1) // self.batch_size
 
     def __iter__(self):
-        num_elements = len(self.sorted_indices)
+        num_elements = len(self.lengths)
         step = self.block_size * self.batch_size
         cnt_blocks = (num_elements + step - 1) // step
         result_batches = []
+        indices = list(range(num_elements))
+        if self.shuffle:
+            random.shuffle(indices)
+            
         for start in range(0, num_elements, step):
             block_len = min(step, num_elements - start)
-            indices = self.sorted_indices[start: start + block_len]
-            perm = torch.randperm(block_len, generator=self.gen) if self.shuffle else torch.arange(block_len)
-            shuffled_indices = indices[perm]
+            block_indices = sorted(indices[start: start + block_len], key=lambda i: self.lengths[i], reverse=True)
             for i in range((block_len + self.batch_size - 1) // self.batch_size):
-                result_batches.append(shuffled_indices[i * self.batch_size: min((i + 1) * self.batch_size, block_len)])
+                result_batches.append(block_indices[i * self.batch_size: min((i + 1) * self.batch_size, block_len)])
         
-        batch_perm = torch.randperm(len(result_batches), generator=self.gen) if self.shuffle else torch.arange(len(result_batches))
-        for i in batch_perm:
-            yield result_batches[i]
+        if self.shuffle:
+            random.shuffle(result_batches)
+
+        for batch in result_batches:
+            yield batch
