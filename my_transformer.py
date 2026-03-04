@@ -389,7 +389,7 @@ class EncoderDecoderTransformer(nn.Module):
             best_tokens_id = torch.topk(new_probs, k=num_beam_paths, dim=1, largest=False)[1]
 
             best_paths_id = best_tokens_id // num_beam_paths
-            best_paths_id_reshape = (torch.arange(batch_size) * batch_size)[:, None] + best_paths_id
+            best_paths_id_reshape = (torch.arange(batch_size, device=device) * batch_size)[:, None] + best_paths_id
             tokens = tokens[torch.arange(len(tokens))[:, None], best_paths_id]
             token_embeddings = token_embeddings[best_paths_id_reshape.reshape(-1)]
             mask_eos = mask_eos[best_paths_id_reshape.reshape(-1)]
