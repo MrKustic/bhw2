@@ -159,12 +159,15 @@ class LengthBatchSampler(Sampler):
         num_elements = len(self.sorted_indices)
         step = self.block_size * self.batch_size
         cnt_blocks = (num_elements + step - 1) // step
-        blocks_perm = torch.randperm(cnt_blocks, generator=self.gen) if self.shuffle else torch.arange(cnt_blocks)
-        for block_id in blocks_perm:
-            start = block_id * step
+        result_batches = []
+        for start in range(0, num_elements, step):
             block_len = min(step, num_elements - start)
             indices = self.sorted_indices[start: start + block_len]
             perm = torch.randperm(block_len, generator=self.gen) if self.shuffle else torch.arange(block_len)
             shuffled_indices = indices[perm]
             for i in range((block_len + self.batch_size - 1) // self.batch_size):
-                yield shuffled_indices[i * self.batch_size: min((i + 1) * self.batch_size, block_len)]
+                result_batches.append(shuffled_indices[i * self.batch_size: min((i + 1) * self.batch_size, block_len)])
+        
+        batch_perm = torch.randperm(len(result_batches), generator=self.gen) if self.shuffle else torch.arange(len(result_batches))
+        for i in batch_perm:
+            yield result_batches[i]
