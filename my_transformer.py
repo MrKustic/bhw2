@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from typing import List
 from torch.distributions.categorical import Categorical
-
+from torch.nn.functional import log_softmax
 
 class PositionalEncoding(nn.Module):
     def __init__(self, max_length=128, embed_size=256, dropout=0.5):
@@ -362,7 +362,7 @@ class EncoderDecoderTransformer(nn.Module):
             decoder_output = self.decoder(token_embeddings, encoder_output, lengths)
 
             logits = self.linear(decoder_output)
-            logits = -torch.log(logits[:, -1, :])
+            logits = -log_softmax(logits[:, -1, :])
 
             new_tokens = torch.topk(logits, k=num_beam_paths, dim=1, largest=False)[1]
             new_probs = torch.gather(logits, dim=1, index=new_tokens) # (batch_size, num_beam_paths) or (batch_size * num_bram_paths, num_beam_paths)
