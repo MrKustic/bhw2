@@ -140,7 +140,7 @@ class TextDataset(Dataset):
 
 
 class LengthBatchSampler(Sampler):
-    def __init__(self, lengths: torch.Tensor, batch_size: int, block_size: int=100, shuffle: bool=False):
+    def __init__(self, lengths: torch.Tensor, batch_size: int, block_size: int=10, shuffle: bool=False):
         '''
         lengths: lengths of sequences (len(dataset),)
         batch_size: int
@@ -158,7 +158,10 @@ class LengthBatchSampler(Sampler):
     def __iter__(self):
         num_elements = len(self.sorted_indices)
         step = self.block_size * self.batch_size
-        for start in range(0, num_elements, step):
+        cnt_blocks = (num_elements + step - 1) // step
+        blocks_perm = torch.randperm(cnt_blocks, generator=self.gen) if self.shuffle else torch.arange(cnt_blocks)
+        for block_id in blocks_perm:
+            start = block_id * step
             block_len = min(step, num_elements - start)
             indices = self.sorted_indices[start: start + block_len]
             perm = torch.randperm(block_len, generator=self.gen) if self.shuffle else torch.arange(block_len)
