@@ -364,7 +364,7 @@ class EncoderDecoderTransformer(nn.Module):
             logits = self.linear(decoder_output)
             logits = -torch.log(logits[:, -1, :])
 
-            new_tokens = torch.argsort(logits, dim=1)[:, :num_beam_paths]
+            new_tokens = torch.topk(logits, k=num_beam_paths, dim=1, largest=False)[1]
             new_probs = torch.gather(logits, dim=1, index=new_tokens) # (batch_size, num_beam_paths) or (batch_size * num_bram_paths, num_beam_paths)
 
             if i == 0:
@@ -379,13 +379,15 @@ class EncoderDecoderTransformer(nn.Module):
                 lengths = torch.repeat_interleave(lengths, num_beam_paths, dim=0)
                 continue
             
-            new_probs *= probs[:, None] # (batch_size * num_beam_paths, num_beam_paths)
+            new_probs += probs[:, None] # (batch_size * num_beam_paths, num_beam_paths)
             new_probs[mask_eos, :] = 1e9 
             new_probs = new_probs.reshape(batch_size, num_beam_paths ** 2) # (batch_size, num_beam_paths * num_beam_paths)
 
-            best_tokens_id = torch.argsort(new_probs, dim=1)[:, :num_beam_paths]
+            best_tokens_id = torch.topk(new_probs, k=num_beam_paths, dim=1, largest=False)[1]
+            best_paths_id = best_tokens_id // num_beam_paths
             probs = torch.gather(new_probs, dim=1, index=best_tokens_id).reshape(-1)
             new_tokens = torch.gather(new_tokens.reshape(batch_size, num_beam_paths ** 2), dim=1, index=best_tokens_id)
+            tokens = tokens[torch.arange(len(tokens))[:, None], best_paths_id]
             tokens = torch.cat([tokens, new_tokens[:, :, None]], dim=-1)
             new_embeddings = self.decoder_embedding(new_tokens.reshape(-1)[:, None]) # (batch_size * num_beam_paths, 1, embed_size)
             token_embeddings = torch.cat([token_embeddings, new_embeddings], dim=1) # (batch_size * num_beam_paths, length, embed_size)
