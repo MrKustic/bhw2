@@ -362,7 +362,7 @@ class EncoderDecoderTransformer(nn.Module):
             decoder_output = self.decoder(token_embeddings, encoder_output, lengths)
 
             logits = self.linear(decoder_output)
-            logits = -log_softmax(logits[:, -1, :])
+            logits = -log_softmax(logits[:, -1, :], dim=-1)
 
             new_tokens = torch.topk(logits, k=num_beam_paths, dim=1, largest=False)[1]
             new_probs = torch.gather(logits, dim=1, index=new_tokens) # (batch_size, num_beam_paths) or (batch_size * num_bram_paths, num_beam_paths)
