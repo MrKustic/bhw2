@@ -2,7 +2,7 @@ import os
 import torch
 from typing import Union, List, Tuple, Dict
 from sentencepiece import SentencePieceTrainer, SentencePieceProcessor
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, Sampler
 from torch.nn.utils.rnn import pad_sequence
 from sklearn.model_selection import train_test_split
 from collections import Counter
@@ -122,6 +122,10 @@ class TextDataset(Dataset):
 
         return tuple(result)
 
+    def get_text_lengths(self, lang='de'):
+        model_id = 0 if lang == 'de' else 1
+        return torch.tensor([len(text) + 2 for text in self.indices[model_id]], dtype=torch.int32)
+
 
     def collate_fn(self, data):
         if len(data[0]) == 2:
@@ -133,3 +137,31 @@ class TextDataset(Dataset):
         pad_indices = pad_sequence(indices, batch_first=True, padding_value=self.pad_id)
         pad_target = pad_sequence(target, batch_first=True, padding_value=self.pad_id)
         return pad_indices, torch.tensor(ind_lengths), pad_target, torch.tensor(trg_lengths)
+
+
+class LengthBatchSampler(Sampler):
+    def __init__(self, lengths: torch.Tensor, batch_size: int, block_size: int=100, shuffle: bool=False):
+        '''
+        lengths: lengths of sequences (len(dataset),)
+        batch_size: int
+        block_size: number of batches in one block (elements in each block sorted by length in descending order)
+        '''
+        self.batch_size = batch_size
+        self.sorted_indices = lengths.argsort(descending=False)
+        self.block_size = block_size
+        self.gen = torch.Generator().manual_seed(42)
+        self.shuffle = shuffle
+
+    def __len__(self):
+        return len(self.sorted_indices)
+
+    def __iter__(self):
+        num_elements = len(self.sorted_indices)
+        step = self.block_size * self.batch_size
+        for start in range(0, num_elements, step):
+            block_len = min(step, num_elements - start)
+            indices = self.sorted_indices[start: start + block_len]
+            perm = torch.randperm(block_len, generator=self.gen) if self.shuffle else torch.arange(block_len)
+            shuffled_indices = indices[perm]
+            for i in range(self.block_size):
+                yield shuffled_indices[i * self.batch_size: min((i + 1) * self.batch_size, block_len)]
