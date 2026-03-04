@@ -153,7 +153,7 @@ class LengthBatchSampler(Sampler):
         self.shuffle = shuffle
 
     def __len__(self):
-        return len(self.sorted_indices)
+        return (len(self.sorted_indices) + self.batch_size - 1) // self.batch_size
 
     def __iter__(self):
         num_elements = len(self.sorted_indices)
