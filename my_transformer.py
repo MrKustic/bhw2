@@ -142,6 +142,7 @@ class EncoderTransformer(nn.Module):
     def __init__(self, max_length=128, embed_size=256, feedforward_hidden_size=256, n_heads=8, n_layers=2, dropout=0.5, norm_first=False):
         super().__init__()
 
+        self.layer_norm = nn.LayerNorm(embed_size) if norm_first else None
         self.pe = PositionalEncoding(max_length, embed_size, dropout)
 
         self.transformer_layers = nn.ModuleList([
@@ -164,6 +165,9 @@ class EncoderTransformer(nn.Module):
         output = pe_embeds
         for transformer in self.transformer_layers:
             output = transformer(output, attention_mask)
+        
+        if self.layer_norm is not None:
+            output = self.layer_norm(output)
 
         return output
 
@@ -179,7 +183,6 @@ class DecoderTransformerLayer(nn.Module):
         self.layer_norm1 = nn.LayerNorm(embed_size)
         self.layer_norm2 = nn.LayerNorm(embed_size)
         self.layer_norm3 = nn.LayerNorm(embed_size)
-        self.layer_norm4 = nn.LayerNorm(embed_size)
 
         self.feedforward = nn.Sequential(
             nn.Linear(embed_size, feedforward_hidden_size),
@@ -227,8 +230,7 @@ class DecoderTransformerLayer(nn.Module):
         norm_masked_attention = self.layer_norm2(masked_attention_output)
         cross_attention_output = self.cross_attention(norm_masked_attention, encoder_output, encoder_output, attention_mask) + masked_attention_output
 
-        feedforward_output = self.feedforward(self.layer_norm3(cross_attention_output)) + cross_attention_output
-        output = self.layer_norm4(feedforward_output)
+        output = self.feedforward(self.layer_norm3(cross_attention_output)) + cross_attention_output
 
         return output
 
@@ -237,6 +239,7 @@ class DecoderTransformer(nn.Module):
     def __init__(self, max_length=128, embed_size=256, feedforward_hidden_size=256, n_heads=8, n_layers=2, dropout=0.5, norm_first=False):
         super().__init__()
 
+        self.layer_norm = nn.LayerNorm(embed_size) if norm_first else None
         self.pe = PositionalEncoding(max_length, embed_size, dropout)
 
         self.transformer_layers = nn.ModuleList([
@@ -259,6 +262,9 @@ class DecoderTransformer(nn.Module):
         output = pe_embeds
         for transformer in self.transformer_layers:
             output = transformer(output, encoder_output, attention_mask)
+
+        if self.layer_norm is not None:
+            output = self.layer_norm(output)
 
         return output
 
