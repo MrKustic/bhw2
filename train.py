@@ -9,6 +9,7 @@ from IPython.display import clear_output
 from tqdm.notebook import tqdm
 from my_transformer import EncoderDecoderTransformer
 import sacrebleu
+import os
 
 sns.set_style('whitegrid')
 plt.rcParams.update({'font.size': 15})
@@ -70,6 +71,7 @@ def training_epoch(model: EncoderDecoderTransformer, optimizer: torch.optim.Opti
         optimizer.step()
 
         train_loss += loss.item() * indices.shape[0]  
+        break
 
     train_loss /= len(loader.dataset)
     return train_loss
@@ -104,6 +106,7 @@ def validation_epoch(model: EncoderDecoderTransformer, criterion: nn.Module,
         loss = criterion(logits.transpose(1, 2), target[:, 1:])
         val_loss += loss.item() * indices.shape[0]
         model_translation += model.inference(indices, lengths)
+        break
 
     val_loss /= len(loader.dataset)
 
@@ -113,7 +116,7 @@ def validation_epoch(model: EncoderDecoderTransformer, criterion: nn.Module,
 
 
 def train(model: EncoderDecoderTransformer, optimizer: torch.optim.Optimizer, scheduler: Optional[Any],
-          train_loader: DataLoader, val_loader: DataLoader, num_epochs: int, num_examples=5):
+          train_loader: DataLoader, val_loader: DataLoader, num_epochs: int, num_examples=5, prefix='transformer'):
     """
     Train language model for several epochs
     :param model: language model to train
@@ -127,6 +130,8 @@ def train(model: EncoderDecoderTransformer, optimizer: torch.optim.Optimizer, sc
     device = next(model.parameters()).device
     train_losses, val_losses, bleu_scores = [], [], []
     criterion = nn.CrossEntropyLoss(ignore_index=train_loader.dataset.pad_id, label_smoothing=0.1)
+
+    torch.save(model.state_dict(), f"{prefix}_0_epochs.pth")
 
     for epoch in range(1, num_epochs + 1):
         train_loss = training_epoch(
@@ -145,6 +150,12 @@ def train(model: EncoderDecoderTransformer, optimizer: torch.optim.Optimizer, sc
         val_losses += [val_loss]
         bleu_scores += [bleu_score]
         plot_losses(train_losses, val_losses, bleu_scores)
+
+        torch.save(model.state_dict(), f"{prefix}_{epoch}_epochs.pth")
+        try:
+            os.remove(f"{prefix}_{epoch - 1}_epochs.pth")
+        except:
+            pass
 
         for indices, lengths, _, _ in val_loader:
             translation = model.inference(indices[:num_examples, :].to(device), lengths[:num_examples])
