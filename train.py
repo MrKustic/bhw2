@@ -71,7 +71,6 @@ def training_epoch(model: EncoderDecoderTransformer, optimizer: torch.optim.Opti
         optimizer.step()
 
         train_loss += loss.item() * indices.shape[0]  
-        break
 
     train_loss /= len(loader.dataset)
     return train_loss
@@ -106,7 +105,6 @@ def validation_epoch(model: EncoderDecoderTransformer, criterion: nn.Module,
         loss = criterion(logits.transpose(1, 2), target[:, 1:])
         val_loss += loss.item() * indices.shape[0]
         model_translation += model.inference(indices, lengths)
-        break
 
     val_loss /= len(loader.dataset)
 
