@@ -302,6 +302,121 @@ class EncoderDecoderTransformer(nn.Module):
 
         return logits
 
+    # @torch.inference_mode()
+    # def inference(self, indices: torch.Tensor, lengths: torch.Tensor, temp: float = 1., num_beam_paths: int=None) -> List[str]:
+    #     '''
+    #     param indices -- batch of padded tokenized input sequences (batch_size, length)
+    #     params lengths -- real lengths of sequences (batch_size,)
+    #     return: batch of generated strings
+    #     '''
+
+    #     self.eval()
+    #     device = next(self.parameters()).device
+
+    #     if num_beam_paths is None:
+    #         input_embeddings = self.encoder_embedding(indices)
+    #         encoder_output = self.encoder(input_embeddings, lengths)
+
+    #         batch_size = indices.shape[0]
+    #         tokens = torch.tensor([self.dataset.bos_id] * batch_size, device=device, dtype=torch.int32)[:, None]
+    #         mask_eos = torch.zeros((batch_size,), device=device, dtype=torch.bool)
+    #         token_embeddings = self.decoder_embedding(tokens) # (batch_size, 1, embed_size)
+
+    #         for i in range(self.max_length - 1):
+    #             decoder_output = self.decoder(token_embeddings, encoder_output, lengths)
+
+    #             logits = self.linear(decoder_output)
+    #             new_tokens = Categorical(logits=logits[:, -1, :] / temp).sample() # (batch_size,)
+    #             new_tokens = torch.where(mask_eos, self.dataset.pad_id, new_tokens)
+    #             mask_eos = mask_eos | (new_tokens == self.dataset.eos_id)
+    #             tokens = torch.cat([tokens, new_tokens[:, None]], dim=1)
+    #             new_embeddings = self.decoder_embedding(new_tokens[:, None])
+    #             token_embeddings = torch.cat([token_embeddings, new_embeddings], dim=1) # (batch_size, length, embed_size)
+
+    #             if mask_eos.sum() == batch_size:
+    #                 break
+            
+    #         generated = self.dataset.ids2text(tokens, lang='en')
+
+    #         return generated
+
+    #     input_embeddings = self.encoder_embedding(indices)
+    #     encoder_output = self.encoder(input_embeddings, lengths)
+
+    #     batch_size = indices.shape[0]
+    #     mask_eos = torch.zeros((batch_size * num_beam_paths,), device=device, dtype=torch.bool)
+    #     probs = None # (batch_size * num_beam_paths,)
+    #     norm_logprobs = torch.full((batch_size * num_beam_paths,), 1e9, device=device)
+    #     tokens = torch.tensor([self.dataset.bos_id] * batch_size, device=device, dtype=torch.int32)[:, None]
+    #     token_embeddings = self.decoder_embedding(tokens) # (batch_size, 1, embed_size)
+    #     tokens = tokens[:, None, :].repeat(1, num_beam_paths, 1) # (batch_size, num_beam_paths, length)
+
+    #     for i in range(self.max_length - 1):
+    #         decoder_output = self.decoder(token_embeddings, encoder_output, lengths)
+
+    #         logits = self.linear(decoder_output)
+    #         logits = -log_softmax(logits[:, -1, :] / temp, dim=-1)
+
+    #         new_tokens = torch.topk(logits, k=num_beam_paths, dim=1, largest=False)[1]
+    #         new_probs = torch.gather(logits, dim=1, index=new_tokens) # (batch_size, num_beam_paths) or (batch_size * num_bram_paths, num_beam_paths)
+
+    #         if i == 0:
+    #             stopped_paths = (new_tokens.reshape(-1) == self.dataset.eos_id)
+    #             mask_eos = mask_eos | stopped_paths
+    #             probs = new_probs.reshape(-1)
+    #             norm_logprobs[stopped_paths] = probs[stopped_paths] / (torch.tensor(i + 1) ** 0.75)
+    #             tokens = torch.cat([tokens, new_tokens[:, :, None]], dim=-1)
+    #             new_embeddings = self.decoder_embedding(new_tokens.reshape(-1)[:, None])
+    #             token_embeddings = torch.cat([torch.repeat_interleave(token_embeddings, num_beam_paths, dim=0), new_embeddings], dim=1) # (batch_size * num_beam_paths, length, embed_size)
+    #             encoder_output = torch.repeat_interleave(encoder_output, num_beam_paths, dim=0)
+    #             lengths = torch.repeat_interleave(lengths, num_beam_paths, dim=0)
+    #             continue
+            
+    #         new_probs += probs[:, None] # (batch_size * num_beam_paths, num_beam_paths)
+
+    #         new_tokens[mask_eos, :] = self.dataset.pad_id
+    #         new_probs[mask_eos, :] = 1e9
+    #         new_probs[mask_eos, 0] = 0
+
+    #         new_probs = new_probs.reshape(batch_size, num_beam_paths ** 2) # (batch_size, num_beam_paths * num_beam_paths)
+    #         best_tokens_id = torch.topk(new_probs, k=num_beam_paths, dim=1, largest=False)[1]
+
+    #         best_paths_id = best_tokens_id // num_beam_paths
+    #         best_paths_id_reshape = (torch.arange(batch_size, device=device) * num_beam_paths)[:, None] + best_paths_id
+    #         tokens = tokens[torch.arange(len(tokens))[:, None], best_paths_id]
+    #         token_embeddings = token_embeddings[best_paths_id_reshape.reshape(-1)]
+    #         mask_eos = mask_eos[best_paths_id_reshape.reshape(-1)]
+
+    #         probs = torch.gather(new_probs, dim=1, index=best_tokens_id).reshape(-1)
+    #         new_tokens = torch.gather(new_tokens.reshape(batch_size, num_beam_paths ** 2), dim=1, index=best_tokens_id)
+    #         tokens = torch.cat([tokens, new_tokens[:, :, None]], dim=-1)
+    #         new_embeddings = self.decoder_embedding(new_tokens.reshape(-1)[:, None]) # (batch_size * num_beam_paths, 1, embed_size)
+    #         token_embeddings = torch.cat([token_embeddings, new_embeddings], dim=1) # (batch_size * num_beam_paths, length, embed_size)
+
+    #         stopped_paths = (new_tokens.reshape(-1) == self.dataset.eos_id)
+    #         mask_eos = mask_eos | stopped_paths
+    #         norm_logprobs[stopped_paths] = probs[stopped_paths] / (torch.tensor(i + 1) ** 0.75)
+
+    #         if mask_eos.sum() == len(mask_eos):
+    #             break
+
+    #     best_paths_id = norm_logprobs.reshape(batch_size, num_beam_paths).argmin(dim=1)
+    #     best_paths = tokens[torch.arange(batch_size), best_paths_id]
+
+    #     generated = self.dataset.ids2text(best_paths, lang='en')
+
+    #     return generated
+
+    def fill_prefix_with_indices_(self, a: torch.Tensor, mask: torch.Tensor, k: int) -> torch.Tensor:
+        rows, cols = mask.nonzero(as_tuple=True)
+
+        counts = mask.cumsum(dim=1)
+        indices = counts[rows, cols] - 1
+        
+        a[rows, indices] = cols * k
+
+        return a
+
     @torch.inference_mode()
     def inference(self, indices: torch.Tensor, lengths: torch.Tensor, temp: float = 1., num_beam_paths: int=None) -> List[str]:
         '''
@@ -344,63 +459,68 @@ class EncoderDecoderTransformer(nn.Module):
         encoder_output = self.encoder(input_embeddings, lengths)
 
         batch_size = indices.shape[0]
-        mask_eos = torch.zeros((batch_size * num_beam_paths,), device=device, dtype=torch.bool)
-        probs = None # (batch_size * num_beam_paths,)
-        norm_logprobs = torch.full((batch_size * num_beam_paths,), 1e9, device=device)
+        mask_eos = torch.zeros((batch_size, num_beam_paths), device=device, dtype=torch.bool)
+        probs = None # (batch_size, num_beam_paths)
         tokens = torch.tensor([self.dataset.bos_id] * batch_size, device=device, dtype=torch.int32)[:, None]
         token_embeddings = self.decoder_embedding(tokens) # (batch_size, 1, embed_size)
         tokens = tokens[:, None, :].repeat(1, num_beam_paths, 1) # (batch_size, num_beam_paths, length)
 
         for i in range(self.max_length - 1):
-            decoder_output = self.decoder(token_embeddings, encoder_output, lengths)
+            decoder_output = self.decoder(token_embeddings.reshape(-1, i + 1, token_embeddings.shape[-1]), encoder_output, lengths)
 
             logits = self.linear(decoder_output)
             logits = -log_softmax(logits[:, -1, :] / temp, dim=-1)
-
-            new_tokens = torch.topk(logits, k=num_beam_paths, dim=1, largest=False)[1]
-            new_probs = torch.gather(logits, dim=1, index=new_tokens) # (batch_size, num_beam_paths) or (batch_size * num_bram_paths, num_beam_paths)
+            if i == 0:
+                logits = logits.reshape(batch_size, -1)
+            else:
+                logits = logits.reshape(batch_size, num_beam_paths, -1)
+            new_probs, new_tokens = torch.topk(logits, k=num_beam_paths, dim=-1, largest=False) # (batch_size, num_beam_paths) or (batch_size, num_bram_paths, num_beam_paths)
 
             if i == 0:
-                stopped_paths = (new_tokens.reshape(-1) == self.dataset.eos_id)
-                mask_eos = mask_eos | stopped_paths
-                probs = new_probs.reshape(-1)
-                norm_logprobs[stopped_paths] = probs[stopped_paths] / (torch.tensor(i + 1) ** 0.75)
+                probs = new_probs
                 tokens = torch.cat([tokens, new_tokens[:, :, None]], dim=-1)
-                new_embeddings = self.decoder_embedding(new_tokens.reshape(-1)[:, None])
-                token_embeddings = torch.cat([torch.repeat_interleave(token_embeddings, num_beam_paths, dim=0), new_embeddings], dim=1) # (batch_size * num_beam_paths, length, embed_size)
+                new_embeddings = self.decoder_embedding(new_tokens.reshape(-1)[:, None]).reshape(batch_size, num_beam_paths, 1, -1)
+                token_embeddings = torch.cat([token_embeddings[:, None].repeat(1, num_beam_paths, 1, 1), new_embeddings], dim=2)
+
                 encoder_output = torch.repeat_interleave(encoder_output, num_beam_paths, dim=0)
                 lengths = torch.repeat_interleave(lengths, num_beam_paths, dim=0)
-                continue
-            
-            new_probs += probs[:, None] # (batch_size * num_beam_paths, num_beam_paths)
+            else:
+                # делаем 1e9 стоимости продожений оконченных путей
+                # выбираем 5 самых выгодных
+                # подставляем в начало уже оконченные пути
 
-            new_tokens[mask_eos, :] = self.dataset.pad_id
-            new_probs[mask_eos, :] = 1e9
-            new_probs[mask_eos, 0] = 0
+                new_probs += probs[:, :, None]
+                new_probs[mask_eos] = 1e9
+                new_tokens[mask_eos] = self.dataset.pad_id
 
-            new_probs = new_probs.reshape(batch_size, num_beam_paths ** 2) # (batch_size, num_beam_paths * num_beam_paths)
-            best_tokens_id = torch.topk(new_probs, k=num_beam_paths, dim=1, largest=False)[1]
+                probs, best_tokens_id = \
+                    torch.topk(new_probs.reshape(batch_size, num_beam_paths ** 2), k=num_beam_paths, dim=1, largest=False) # (batch_size, num_beam_paths)
+                probs = probs.flip(dims=[1])
+                best_tokens_id = best_tokens_id.flip(dims=[1])
 
-            best_paths_id = best_tokens_id // num_beam_paths
-            best_paths_id_reshape = (torch.arange(batch_size, device=device) * num_beam_paths)[:, None] + best_paths_id
-            tokens = tokens[torch.arange(len(tokens))[:, None], best_paths_id]
-            token_embeddings = token_embeddings[best_paths_id_reshape.reshape(-1)]
-            mask_eos = mask_eos[best_paths_id_reshape.reshape(-1)]
+                best_tokens_id = self.fill_prefix_with_indices_(best_tokens_id, mask_eos, num_beam_paths) # return finished paths
+                sorted_mask_eos = torch.sort(mask_eos, dim=1, descending=True)[0]
+                new_probs[sorted_mask_eos] = probs[mask_eos, None] # set the real probs to the finished paths
+                new_tokens = torch.gather(new_tokens.reshape(batch_size, num_beam_paths ** 2), dim=1, index=best_tokens_id) # (batch_size, num_beam_paths)
+                mask_eos = sorted_mask_eos
 
-            probs = torch.gather(new_probs, dim=1, index=best_tokens_id).reshape(-1)
-            new_tokens = torch.gather(new_tokens.reshape(batch_size, num_beam_paths ** 2), dim=1, index=best_tokens_id)
-            tokens = torch.cat([tokens, new_tokens[:, :, None]], dim=-1)
-            new_embeddings = self.decoder_embedding(new_tokens.reshape(-1)[:, None]) # (batch_size * num_beam_paths, 1, embed_size)
-            token_embeddings = torch.cat([token_embeddings, new_embeddings], dim=1) # (batch_size * num_beam_paths, length, embed_size)
+                best_paths_id = best_tokens_id // num_beam_paths
 
-            stopped_paths = (new_tokens.reshape(-1) == self.dataset.eos_id)
-            mask_eos = mask_eos | stopped_paths
-            norm_logprobs[stopped_paths] = probs[stopped_paths] / (torch.tensor(i + 1) ** 0.75)
+                tokens = tokens[torch.arange(batch_size)[:, None], best_paths_id]
+                tokens = torch.cat([tokens, new_tokens[:, :, None]], dim=-1)
+
+                token_embeddings = token_embeddings[torch.arange(batch_size)[:, None], best_paths_id]
+                new_embeddings = self.decoder_embedding(new_tokens.reshape(-1)[:, None]).reshape(batch_size, num_beam_paths, 1, -1) # (batch_size * num_beam_paths, 1, embed_size)
+                token_embeddings = torch.cat([token_embeddings, new_embeddings], dim=2)
+
+            new_finished_paths = (new_tokens == self.dataset.eos_id)
+            mask_eos |= new_finished_paths
+            probs[new_finished_paths] /= (torch.tensor(i + 1) ** 0.75)
 
             if mask_eos.sum() == len(mask_eos):
                 break
-
-        best_paths_id = norm_logprobs.reshape(batch_size, num_beam_paths).argmin(dim=1)
+                
+        best_paths_id = probs.argmin(dim=1)
         best_paths = tokens[torch.arange(batch_size), best_paths_id]
 
         generated = self.dataset.ids2text(best_paths, lang='en')
