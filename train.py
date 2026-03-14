@@ -10,6 +10,7 @@ from tqdm.notebook import tqdm
 from my_transformer import EncoderDecoderTransformer
 import sacrebleu
 import os
+import comet_ml
 
 sns.set_style('whitegrid')
 plt.rcParams.update({'font.size': 15})
@@ -71,6 +72,7 @@ def training_epoch(model: EncoderDecoderTransformer, optimizer: torch.optim.Opti
         optimizer.step()
 
         train_loss += loss.item() * indices.shape[0]  
+        break
 
     train_loss /= len(loader.dataset)
     return train_loss
@@ -105,6 +107,7 @@ def validation_epoch(model: EncoderDecoderTransformer, criterion: nn.Module,
         loss = criterion(logits.transpose(1, 2), target[:, 1:])
         val_loss += loss.item() * indices.shape[0]
         model_translation += model.inference(indices, lengths)
+        break
 
     val_loss /= len(loader.dataset)
 
@@ -128,8 +131,10 @@ def train(model: EncoderDecoderTransformer, optimizer: torch.optim.Optimizer, sc
     device = next(model.parameters()).device
     train_losses, val_losses, bleu_scores = [], [], []
     criterion = nn.CrossEntropyLoss(ignore_index=train_loader.dataset.pad_id, label_smoothing=0.1)
+    exp = comet_ml.start(project_name='dl-bhw-2', mode='create')
 
     torch.save(model.state_dict(), f"{prefix}_0_epochs.pth")
+    exp.log_asset(f"{prefix}_0_epochs.pth", file_name=f"{prefix}_0_epochs.pth")
 
     for epoch in range(1, num_epochs + 1):
         train_loss = training_epoch(
@@ -138,7 +143,7 @@ def train(model: EncoderDecoderTransformer, optimizer: torch.optim.Optimizer, sc
         )
         val_loss, bleu_score = validation_epoch(
             model, criterion, val_loader,
-            tqdm_desc=f'Validating {epoch}/{num_epochs}'
+            tqdm_desc=f'Validating {epoch}/{num_epochs}',
         )
 
         if scheduler is not None:
@@ -150,6 +155,18 @@ def train(model: EncoderDecoderTransformer, optimizer: torch.optim.Optimizer, sc
         plot_losses(train_losses, val_losses, bleu_scores)
 
         torch.save(model.state_dict(), f"{prefix}_{epoch}_epochs.pth")
+        
+        try:
+            exp.log_metrics({
+                "Train_loss": train_loss,
+                "Val_loss": val_loss,
+                "val_bleu_score": bleu_score
+            }, epoch=epoch)
+            exp.log_asset(f"{prefix}_{epoch}_epochs.pth", file_name=f"{prefix}_{epoch}_epochs.pth")
+        except Exception as e:
+            print(f"Couldn't save the model asset, {epoch=}")
+            print(e)
+
         try:
             os.remove(f"{prefix}_{epoch - 1}_epochs.pth")
         except:
@@ -160,3 +177,5 @@ def train(model: EncoderDecoderTransformer, optimizer: torch.optim.Optimizer, sc
             print(*zip(translation, val_loader.dataset.ids2text(indices[:num_examples, :])), sep='\n')
             print(val_loader.dataset.text2ids(translation, 'en'))
             break
+    
+    exp.end()
