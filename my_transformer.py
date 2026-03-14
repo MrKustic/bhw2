@@ -303,7 +303,7 @@ class EncoderDecoderTransformer(nn.Module):
         return logits
 
     @torch.inference_mode()
-    def inference(self, indices: torch.Tensor, lengths: torch.Tensor, temp: float = 1., num_beam_paths: int=None) -> List[str]:
+    def inference(self, indices: torch.Tensor, lengths: torch.Tensor, temp: float = 1., num_beam_paths: int=1) -> List[str]:
         '''
         param indices -- batch of padded tokenized input sequences (batch_size, length)
         params lengths -- real lengths of sequences (batch_size,)
