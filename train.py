@@ -1,3 +1,4 @@
+import comet_ml
 import torch
 import numpy as np
 import seaborn as sns
@@ -10,7 +11,6 @@ from tqdm.notebook import tqdm
 from my_transformer import EncoderDecoderTransformer
 import sacrebleu
 import os
-import comet_ml
 
 sns.set_style('whitegrid')
 plt.rcParams.update({'font.size': 15})
