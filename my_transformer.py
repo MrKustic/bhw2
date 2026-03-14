@@ -285,10 +285,6 @@ class EncoderDecoderTransformer(nn.Module):
 
         self.linear = nn.Linear(embed_size, vocab_sizes[1])
 
-        for p in self.parameters():
-            if p.dim() > 1:
-                nn.init.xavier_uniform_(p)
-
     def forward(self, encoder_indices, decoder_indices, encoder_lengths=None):
         '''
         params encoder_indices, decoder_indices -- batch of padded tokenized sequences (batch_size, length)
